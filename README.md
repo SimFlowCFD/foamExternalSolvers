@@ -27,8 +27,8 @@ The library is installed as `libAmgX4Foam` into `FOAM_USER_LIBBIN`
 | --- | --- |
 | `AMGX_ARCH_PATH` | AmgX install prefix containing `include/` and `lib/`. SPUMA resolves it through `etc/config.sh/amgx` and derives `AMGX_INC`/`AMGX_LIB`; elsewhere set `AMGX_INC` and `AMGX_LIB` directly |
 | `CUDA_HOME` / `CUDA_PATH` | CUDA toolkit prefix for clang-based toolchains on Linux (headers in `include/`, `libcudart` in `lib64/`). Not needed for nvc++, nor when the toolkit is on the compiler's default search paths |
-| `CUDA_PATH` (Windows) | CUDA toolkit prefix; SPUMA derives the space-free `CUDA_PATH_SHORT` from it |
-| `CUDA_CLANG` | clang++ used for the `.cu` sources on clang-based toolchains (default: `clang++` from `PATH`) |
+| `CUDA_PATH` (Windows) | CUDA toolkit prefix; SPUMA's wmake derives the space-free `CUDA_PATH_SHORT` from it |
+| `CUDA_CLANG` | clang++ used for the `.cu` sources on clang-based toolchains (default: `clang++` from `PATH`). On Windows it must be clang 20 or newer (the AdaptiveCpp-bundled clang is not) and the build stops otherwise; a path with spaces is 8.3-shortened by `etc/config.sh/amgx` |
 | `NVARCH` | Compute capability for `-cuda` when no value is given on the command line (default 80) |
 
 The build is skipped (exit 0) when AmgX is not found, so the module can be
@@ -83,6 +83,19 @@ rank per GPU no consolidation takes place and AmgX receives the partitions
 directly (`AMGX_matrix_upload_distributed`).
 
 ## Usage
+
+At run time the loader must find the AmgX shared library (`libamgxsh.so` /
+`amgxsh.dll`), the CUDA runtime and `libAmgX4Foam` itself. With SPUMA,
+`etc/config.sh/amgx` adds the AmgX library directory to `LD_LIBRARY_PATH`
+(`PATH` on Windows) when sourced from the OpenFOAM environment, or on demand:
+
+```
+eval "$(foamEtcFile -sh -config amgx -- -force)"
+```
+
+On native Windows also put `FOAM_USER_LIBBIN` (or the `-prefix` location)
+and the CUDA `bin` directory on `PATH`. Elsewhere add `AMGX_LIB` to the
+library path yourself.
 
 Load the library from `system/controlDict` and select the solver per field
 in `system/fvSolution`:

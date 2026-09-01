@@ -75,8 +75,8 @@ case "$FOAM_MODULE_PREFIX" in
     ;;
 esac
 
-# SPUMA: resolve AMGX_ARCH_PATH -> AMGX_INC/AMGX_LIB (and CUDA_PATH_SHORT on
-# Windows). A pre-set AMGX_ARCH_PATH is honored.
+# SPUMA: resolve AMGX_ARCH_PATH -> AMGX_INC/AMGX_LIB (8.3-shortened on
+# Windows, as is a CUDA_CLANG path). A pre-set AMGX_ARCH_PATH is honored.
 if [ -f "$WM_PROJECT_DIR/etc/config.sh/amgx" ]
 then
     . "$WM_PROJECT_DIR/etc/config.sh/amgx"
@@ -97,19 +97,58 @@ fi
 
 case "$WM_OSTYPE" in
 (*[Ww]indows*)
-    if [ -z "$CUDA_PATH_SHORT" ]
+    # wmake derives the space-free CUDA_PATH_SHORT from CUDA_PATH
+    if [ -z "$CUDA_PATH" ] && [ -z "$CUDA_PATH_SHORT" ]
     then
-        echo "Skipping $moduleName (CUDA toolkit not found: CUDA_PATH/CUDA_PATH_SHORT unset)"
+        echo "Skipping $moduleName (CUDA toolkit not found: CUDA_PATH unset)"
         exit 0
     fi
     ;;
 esac
+
+# The .cu sources (-cuda) are compiled by CUDA_CLANG on clang-based
+# toolchains (default: clang++ from PATH). On Windows the clang bundled
+# with AdaptiveCpp (LLVM 19) sits first in PATH and cannot compile CUDA
+# against current toolkits/SDKs: require clang >= 20 there.
+unset cuCompiler
+if [ "$have_cuda" = true ]
+then
+    case "$WM_COMPILER" in
+    (Nvidia*)
+        cuCompiler="nvcc"
+        ;;
+    (*)
+        cuCompiler="$(command -v "${CUDA_CLANG:-clang++}" 2>/dev/null)"
+        if [ -z "$cuCompiler" ]
+        then
+            echo "Error: $moduleName: CUDA_CLANG='${CUDA_CLANG:-clang++}' not found" 1>&2
+            exit 1
+        fi
+        case "$WM_OSTYPE" in
+        (*[Ww]indows*)
+            cuClangMajor="$("$cuCompiler" --version 2>/dev/null \
+                | sed -ne '1s/.*clang version \([0-9][0-9]*\).*/\1/p')"
+            if [ "${cuClangMajor:-0}" -lt 20 ]
+            then
+                echo "Error: $moduleName: CUDA_CLANG='$cuCompiler'" \
+                    "is clang ${cuClangMajor:-?}, need >= 20 for the .cu sources" \
+                    "(set CUDA_CLANG to a suitable clang++)" 1>&2
+                exit 1
+            fi
+            cuCompiler="$cuCompiler (clang $cuClangMajor)"
+            unset cuClangMajor
+            ;;
+        esac
+        ;;
+    esac
+fi
 
 echo "========================================"
 echo "Building $moduleName with ${WM_PROJECT_DIR##*/}"
 echo "  $WM_COMPILER $WM_COMPILER_TYPE compiler (${WM_OPTIONS})"
 echo "  AmgX = ${AMGX_INC%/include}"
 echo "  CUDA executor = ${have_cuda:-false}${have_cuda:+ (sm_${NVARCH:-80})}"
+[ -n "$cuCompiler" ] && echo "  CUDA compiler = $cuCompiler"
 echo "  prefix = ${FOAM_MODULE_PREFIX:-default (user)}"
 echo
 
