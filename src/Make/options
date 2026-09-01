@@ -1,10 +1,15 @@
-/* AmgX location: AMGX_INC / AMGX_LIB from etc/config.sh/amgx
- * (AMGX_ARCH_PATH install prefix). CUDA runtime headers/libs:
- * CUDA_PATH_SHORT on Windows, toolchain default include paths otherwise.
+/* foamExternalSolvers - AmgX4Foam
  *
- * NOTE: this options file targets clang/acpp toolchains (SPUMA). The
- * upstream nvc++ build used `CC += -cuda` and bundled wmake rules; an
- * upstream merge should keep both variants side by side.
+ * AmgX:  AMGX_INC / AMGX_LIB (SPUMA: derived from AMGX_ARCH_PATH by
+ *        etc/config.sh/amgx; otherwise set them in the environment)
+ *
+ * CUDA runtime:
+ *   nvc++ (WM_COMPILER=Nvidia*) - the -cuda language mode provides the
+ *        runtime headers and library; the bundled wmake/ rules add
+ *        -gpu=ccNN and the nvcc rule for .cu sources when have_cuda is set
+ *   clang / AdaptiveCpp (SPUMA Sycl builds) - the toolkit is located via
+ *        CUDA_PATH_SHORT (Windows) or CUDA_HOME / CUDA_PATH (Linux); with
+ *        neither set the compiler's default search paths and -lcudart apply
  */
 
 sinclude $(GENERAL_RULES)/module-path-user
@@ -14,22 +19,49 @@ ifeq (,$(strip $(FOAM_MODULE_LIBBIN)))
     FOAM_MODULE_LIBBIN = $(FOAM_USER_LIBBIN)
 endif
 
-/* No MPI on native Windows builds (dummy Pstream): compile out the
- * PstreamGlobals/MPI-communicator paths; parallel AmgX then FatalErrors.
- */
+/* MPI: native Windows builds link the dummy Pstream (no MPI communicators),
+ * AMGX4FOAM_NO_MPI compiles those paths out (parallel runs then FatalError) */
 ifneq (,$(findstring indows,$(WM_OSTYPE)))
     AMGX_MPI_FLAGS = -DAMGX4FOAM_NO_MPI
-endif
-
-ifneq (,$(strip $(CUDA_PATH_SHORT)))
-    CUDA_ARCH_INC  = -I$(CUDA_PATH_SHORT)/include
-    CUDA_ARCH_LIBS = -L$(CUDA_PATH_SHORT)/lib/x64 -lcudart
 else
-    CUDA_ARCH_LIBS = -lcudart
+    sinclude $(GENERAL_RULES)/mplib$(WM_MPLIB)
+    sinclude $(RULES)/mplib$(WM_MPLIB)
+    AMGX_MPI_FLAGS = $(PFLAGS) $(PINC) -I$(LIB_SRC)/Pstream/mpi
 endif
 
 ifneq (,$(strip $(AMGX_INC)))
     AMGX_INC_FLAGS = -I$(AMGX_INC)
+endif
+
+ifneq (,$(findstring Nvidia,$(WM_COMPILER)))
+
+    CC += -cuda
+    AMGX_CUDA_LIBS = -fopenmp
+
+    WMAKE_LOCAL = $(MAKE_DIR)/../../wmake
+    include $(WMAKE_LOCAL)/c++
+
+else
+
+    ifneq (,$(strip $(CUDA_PATH_SHORT)))
+        AMGX_CUDA_HOME = $(CUDA_PATH_SHORT)
+    else ifneq (,$(strip $(CUDA_HOME)))
+        AMGX_CUDA_HOME = $(CUDA_HOME)
+    else ifneq (,$(strip $(CUDA_PATH)))
+        AMGX_CUDA_HOME = $(CUDA_PATH)
+    endif
+
+    ifneq (,$(strip $(AMGX_CUDA_HOME)))
+        AMGX_CUDA_INC = -I$(AMGX_CUDA_HOME)/include
+        ifneq (,$(findstring indows,$(WM_OSTYPE)))
+            AMGX_CUDA_LIBS = -L$(AMGX_CUDA_HOME)/lib/x64 -lcudart
+        else
+            AMGX_CUDA_LIBS = -L$(AMGX_CUDA_HOME)/lib64 -lcudart
+        endif
+    else
+        AMGX_CUDA_LIBS = -lcudart
+    endif
+
 endif
 
 EXE_INC = \
@@ -41,10 +73,10 @@ EXE_INC = \
     -Iutility \
     -IAmgX4Foam \
     $(AMGX_INC_FLAGS) \
-    $(CUDA_ARCH_INC)
+    $(AMGX_CUDA_INC)
 
 LIB_LIBS = \
     -lfiniteVolume \
     -lmeshTools \
     -L$(AMGX_LIB) -lamgxsh \
-    $(CUDA_ARCH_LIBS)
+    $(AMGX_CUDA_LIBS)

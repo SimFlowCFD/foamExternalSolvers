@@ -1,10 +1,71 @@
 #!/bin/sh
+#------------------------------------------------------------------------------
+# Allwmake for foamExternalSolvers (AmgX4Foam)
+#
+# Usage: ./Allwmake [OPTIONS] [wmake options]
+#
+# Module options (consumed here, all others go to wmake/AllwmakeParseArguments):
+#   -cuda [N] | -cu [N]   Also build the CUDA ldu->csr executor (.cu sources)
+#                         for compute capability N (eg, 80, 86, 90, 120;
+#                         a single digit 5-9 means N0). Default: NVARCH or 80
+#   -clean | -cl          Remove the library, objects and generated files
+#
+# Environment:
+#   AMGX_ARCH_PATH        AmgX install prefix (include/ lib/). On SPUMA it is
+#                         resolved by etc/config.sh/amgx, which also derives
+#                         AMGX_INC/AMGX_LIB (set those directly otherwise)
+#   have_cuda, NVARCH     Same effect as -cuda N (exported by CUDA-enabled
+#                         OpenFOAM/SPUMA environments)
+#
+# Toolchains: nvc++ (WM_COMPILER=Nvidia*, bundled wmake/ rules) and
+# clang-based compilers incl. AdaptiveCpp (SPUMA Sycl builds). See README.md.
+#------------------------------------------------------------------------------
 cd "${0%/*}" || exit                            # Run from this directory
+
+# Consume the module-specific options, keep the rest in "$@"
+unset cleanOnly
+n="$#"
+while [ "$n" -gt 0 ]
+do
+    n=$((n - 1))
+    arg="$1"
+    shift
+    case "$arg" in
+    (-cu | -cuda)
+        export have_cuda=true
+        case "$1" in
+        ([5-9])
+            export NVARCH="${1}0"
+            shift; n=$((n - 1))
+            ;;
+        ([1-9][0-9] | [1-9][0-9][0-9])
+            export NVARCH="$1"
+            shift; n=$((n - 1))
+            ;;
+        esac
+        ;;
+    (-cl | -clean)
+        cleanOnly=true
+        ;;
+    (*)
+        set -- "$@" "$arg"
+        ;;
+    esac
+done
+
+if [ "$cleanOnly" = true ]
+then
+    (cd src && wclean; rm -f Make/files)
+    exit 0
+fi
+
 targetType=libso
 . "${WM_PROJECT_DIR:?}"/wmake/scripts/AllwmakeParseArguments
 
 #------------------------------------------------------------------------------
-
+# Build into FOAM_USER_LIBBIN unless otherwise specified with
+# -prefix or the FOAM_MODULE_LIBBIN env variable
+#------------------------------------------------------------------------------
 moduleName="foamExternalSolvers (AmgX4Foam)"
 
 case "$FOAM_MODULE_PREFIX" in
@@ -14,14 +75,20 @@ case "$FOAM_MODULE_PREFIX" in
     ;;
 esac
 
-# Source the AmgX configuration (honors a pre-set AMGX_ARCH_PATH,
-# always derives AMGX_INC/AMGX_LIB and CUDA_PATH_SHORT)
+# SPUMA: resolve AMGX_ARCH_PATH -> AMGX_INC/AMGX_LIB (and CUDA_PATH_SHORT on
+# Windows). A pre-set AMGX_ARCH_PATH is honored.
 if [ -f "$WM_PROJECT_DIR/etc/config.sh/amgx" ]
 then
     . "$WM_PROJECT_DIR/etc/config.sh/amgx"
 fi
 
-if [ -z "$AMGX_ARCH_PATH" ] || [ ! -d "$AMGX_ARCH_PATH/include" ]
+if [ -z "$AMGX_INC" ] && [ -n "$AMGX_ARCH_PATH" ]
+then
+    export AMGX_INC="$AMGX_ARCH_PATH/include"
+    export AMGX_LIB="$AMGX_ARCH_PATH/lib"
+fi
+
+if [ -z "$AMGX_INC" ] || [ ! -f "$AMGX_INC/amgx_c.h" ]
 then
     echo "Skipping $moduleName (no AmgX found: AMGX_ARCH_PATH unset or invalid)"
     echo "    Set AMGX_ARCH_PATH to an AmgX install prefix (include/ lib/)"
@@ -38,11 +105,15 @@ case "$WM_OSTYPE" in
     ;;
 esac
 
-echo "Building $moduleName (AmgX: $AMGX_ARCH_PATH)"
+echo "========================================"
+echo "Building $moduleName with ${WM_PROJECT_DIR##*/}"
+echo "  $WM_COMPILER $WM_COMPILER_TYPE compiler (${WM_OPTIONS})"
+echo "  AmgX = ${AMGX_INC%/include}"
+echo "  CUDA executor = ${have_cuda:-false}${have_cuda:+ (sm_${NVARCH:-80})}"
+echo "  prefix = ${FOAM_MODULE_PREFIX:-default (user)}"
+echo
 
-# Assemble Make/files: CPU CSR conversion always; CUDA executors when
-# have_cuda is enabled (requires a clang able to compile CUB, see
-# doc/windows-sycl-cuda notes: LLVM 20 + -U__ELF__ on Windows).
+# Make/files: the CPU csr executor always, the CUDA one with have_cuda
 (
     cd src/Make || exit
     if [ "$have_cuda" = true ]
@@ -53,7 +124,6 @@ echo "Building $moduleName (AmgX: $AMGX_ARCH_PATH)"
     fi
 )
 
-(cd src && wmakeLnInclude -update .)
-(cd src && wmake $targetType)
+(cd src && wmakeLnInclude -update . && wmake $targetType)
 
 #------------------------------------------------------------------------------
