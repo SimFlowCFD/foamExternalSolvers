@@ -152,7 +152,6 @@ Foam::solverPerformance Foam::AmgXSolver::solve
     }
 
     Amat.createConsVect(source, psi);
-
     amgx.solve(&Amat);
 
     Amat.distributeSolution(psi);

@@ -1,150 +1,59 @@
 #!/bin/sh
+cd "${0%/*}" || exit                            # Run from this directory
+targetType=libso
+. "${WM_PROJECT_DIR:?}"/wmake/scripts/AllwmakeParseArguments
 
-# Help message
-printHelp()
-{
-    echo " "
-    echo " Usage: ./Allwmake [option]"
-    echo ""
-    echo "options:"
-    echo "  -h       | -help           : Show help"
-    echo "  -cu [N]  | -cuda [N]       : Compile with cuda enabled and compute"
-    echo "                               capability N if specified"
-    echo "  -cl      | -clean          : Launch wclean script in all subfolders"
-    echo "  -jN      | -j N | -j       : Compile using all or specified N"
-    echo "                               cores / hyperthreads"
-    echo ""
-};
+#------------------------------------------------------------------------------
 
-# Create files list
-createFileList()
-{
-    cd Make
-    if [[ "${have_cuda}" == "true" ]]; then :
+moduleName="foamExternalSolvers (AmgX4Foam)"
+
+case "$FOAM_MODULE_PREFIX" in
+(false | none)
+    echo "Compilation of $moduleName is disabled (prefix=${FOAM_MODULE_PREFIX})"
+    exit 0
+    ;;
+esac
+
+# Source the AmgX configuration (honors a pre-set AMGX_ARCH_PATH,
+# always derives AMGX_INC/AMGX_LIB and CUDA_PATH_SHORT)
+if [ -f "$WM_PROJECT_DIR/etc/config.sh/amgx" ]
+then
+    . "$WM_PROJECT_DIR/etc/config.sh/amgx"
+fi
+
+if [ -z "$AMGX_ARCH_PATH" ] || [ ! -d "$AMGX_ARCH_PATH/include" ]
+then
+    echo "Skipping $moduleName (no AmgX found: AMGX_ARCH_PATH unset or invalid)"
+    echo "    Set AMGX_ARCH_PATH to an AmgX install prefix (include/ lib/)"
+    exit 0
+fi
+
+case "$WM_OSTYPE" in
+(*[Ww]indows*)
+    if [ -z "$CUDA_PATH_SHORT" ]
+    then
+        echo "Skipping $moduleName (CUDA toolkit not found: CUDA_PATH/CUDA_PATH_SHORT unset)"
+        exit 0
+    fi
+    ;;
+esac
+
+echo "Building $moduleName (AmgX: $AMGX_ARCH_PATH)"
+
+# Assemble Make/files: CPU CSR conversion always; CUDA executors when
+# have_cuda is enabled (requires a clang able to compile CUB, see
+# doc/windows-sycl-cuda notes: LLVM 20 + -U__ELF__ on Windows).
+(
+    cd src/Make || exit
+    if [ "$have_cuda" = true ]
+    then
         cat filesCuda filesIn > files
     else
         cat filesIn > files
     fi
-    cd ..
-};
+)
 
-#------------------------------------------------------------------------------
-# Initialize variables
-#------------------------------------------------------------------------------
-
-# Nvidia GPU compute capacity
-export NVARCH=80
-
-# Default options
-export have_cuda=false
-export LAUNCH_WCLEAN=false
-export WM_ARGUMENTS=""
-
-#------------------------------------------------------------------------------
-# Parse arguments and options
-#------------------------------------------------------------------------------
-
-while [ "$#" -gt 0 ]
-do
-    case "$1" in
-        ('') ;;
-        (- | --) shift; break ;;  # Stop option parsing
-
-        # Show help
-        -h | -help*)
-            printHelp
-            exit
-            ;;
-
-        # Compile cuda version
-        -cu | -cuda*)
-            export have_cuda=true
-            case "$2" in
-            [0-9]*)
-                if [[ "$2" -ge 5 ]] && [[ "$2" -le 9 ]]; then :
-                    export NVARCH="${2}0"
-                    shift
-                elif [[ "$2" -ge 50 ]] && [[ "$2" -le 90 ]]; then :
-                    export NVARCH="${2}"
-                    shift
-                fi
-                ;;
-            esac
-            ;;
-
-
-        # Clean all subdirectories
-        -cl | -clean*)
-            export LAUNCH_WCLEAN=true
-            ;;
-
-        # Parallel compilation on all cores (or specified number of cores)
-        -j)
-            export WM_NCOMPPROCS="0"
-            case "$2" in
-            [0-9]*)
-                if WM_NCOMPPROCS="$(expr 0 + "$2" 2>/dev/null)"
-                then
-                    shift
-                fi
-                ;;
-            esac
-            ;;
-
-         # Parallel compilation on specified number of cores
-        -j[1-9]*)
-            export WM_NCOMPPROCS="${1#-j}"
-            echo "Compiling enabled on $WM_NCOMPPROCS cores" 1>&2
-            ;;
-
-        # Default
-        *)
-            break
-            ;;
-
-    esac
-    shift
-done
-
-if [[ ! -z ${WM_NCOMPPROCS} ]]; then :
-    WM_ARGUMENTS+=" -j"
-    if [[ ! "${WM_NCOMPPROCS}" == "0" ]]; then :
-        WM_ARGUMENTS+=" ${WM_NCOMPPROCS}"
-    fi
-fi
-
-
-#------------------------------------------------------------------------------
-# Clean installation
-#------------------------------------------------------------------------------
-
-if [[ ${LAUNCH_WCLEAN} == "true" ]]; then :
-
-    # Clean zeptoFOAM library
-    cd src
-        wclean
-        rm -rf lnInclude
-        rm -rf ${FOAM_USER_LIBBIN}/libEscapeFromFoam.so
-        if [[ -f Make/files ]]; then :
-            rm Make/files
-        fi
-    cd ..
-
-    # Exit script without compiling
-    exit
-fi
-
-
-#------------------------------------------------------------------------------
-# Launch installation
-#------------------------------------------------------------------------------
-
-cd ${0%/*} || exit 1                         # Run from this directory
-targetType=libso
-
-cd src
-createFileList
-wmake ${WM_ARGUMENTS} $targetType
-cd ..
+(cd src && wmakeLnInclude -update .)
+(cd src && wmake $targetType)
 
 #------------------------------------------------------------------------------

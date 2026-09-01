@@ -40,6 +40,11 @@ SourceFiles
 #include "lduMatrix.H"
 #include "csrMatrixExecutor.H"
 
+// Member data below uses CUDA runtime types (cudaIpcMemHandle_t) directly.
+// nvc++ -cuda includes the CUDA runtime header implicitly; other compilers
+// (clang, acpp) need it spelled out.
+#include <cuda_runtime_api.h>
+
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
 namespace Foam

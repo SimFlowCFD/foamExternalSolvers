@@ -24,7 +24,9 @@ License
 
 #include "AmgXWrapper.H"
 
+#ifndef AMGX4FOAM_NO_MPI
 #include "PstreamGlobals.H"
+#endif
 
 #include "global.cuh"
 #include "OSspecific.H"
@@ -83,14 +85,32 @@ Foam::AmgXWrapper::~AmgXWrapper()
 
 // * * * * * * * * * * * * * * * Utilities * * * * * * * * * * * * * * * * * * //
 
-void checkAmgXerror(AMGX_RC code, Foam::word function)
+void checkAmgXerror(AMGX_RC code, const std::string& function)
 {
     char buff[256];
     AMGX_get_error_string(code, buff, 256);
     if(code != AMGX_RC_OK){
         AMGX_get_error_string(code, buff, 256);
-        Foam::Info << function << "returned: " << buff << Foam::nl;
+        Foam::Info << function << " returned: " << buff << Foam::nl;
     }
+}
+
+namespace Foam
+{
+bool amgxFoamMemoryIsCudaAccessible(const void* ptr);
+}
+
+bool Foam::amgxFoamMemoryIsCudaAccessible(const void* ptr)
+{
+    cudaPointerAttributes attr{};
+    if (cudaPointerGetAttributes(&attr, ptr) != cudaSuccess)
+    {
+        cudaGetLastError();  // clear the sticky error
+        return false;
+    }
+    return
+        attr.type == cudaMemoryTypeManaged
+     || attr.type == cudaMemoryTypeDevice;
 }
 
 void checkCudaError(cudaError_t err, const char* msg) {
@@ -280,7 +300,11 @@ void Foam::AmgXWrapper::initAmgX(const string &configStr)
                     {Info << msg << nl;}));
 
         //- let AmgX to handle errors returned
+        // Not on Windows: AmgX's handler swallows faults (incl. access
+        // violations) and exits silently, hiding FOAM diagnostics
+#ifndef _WIN32
         AMGX_SAFE_CALL(AMGX_install_signal_handler());
+#endif
     }
 
     //- create an AmgX configure object
@@ -305,7 +329,13 @@ void Foam::AmgXWrapper::initAmgX(const string &configStr)
         }
         else
         {
+#ifdef AMGX4FOAM_NO_MPI
+            FatalErrorInFunction
+                << "Parallel AmgX requires an MPI build of foamExternalSolvers"
+                << abort(FatalError);
+#else
             AMGX_resources_create(&rsrc, cfg, &PstreamGlobals::MPICommunicators_[globalGpuWorld_], 1, &devID_);
+#endif
         }
     }
 
@@ -422,6 +452,23 @@ void Foam::AmgXWrapper::setOperator
             ownStart = matrix->ownerStart();
             colInd = matrix->colIndices();
             matValues = matrix->values();
+
+            // dataLocation=device hands these pointers straight to AmgX:
+            // they must be CUDA device or managed (USM) allocations.
+            // Fails loudly on host-heap arrays, OMP-host or HIP runs.
+            if (!amgxFoamMemoryIsCudaAccessible(matValues)
+             || !amgxFoamMemoryIsCudaAccessible(ownStart)
+             || !amgxFoamMemoryIsCudaAccessible(colInd))
+            {
+                FatalErrorInFunction
+                    << "dataLocation is 'device' but the CSR matrix arrays"
+                    << " are not CUDA-accessible (device/managed) memory."
+                    << nl
+                    << "Use 'dataLocation host', or provide device-resident"
+                    << " matrix storage (NVIDIA GPU run with USM pool"
+                    << " allocations)." << nl
+                    << exit(FatalError);
+            }
         }
 
         //- upload matrix A to AmgX

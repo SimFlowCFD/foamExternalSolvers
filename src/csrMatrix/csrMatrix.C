@@ -20,9 +20,12 @@ License
 
 \*---------------------------------------------------------------------------*/
 
+#ifndef AMGX4FOAM_NO_MPI
 #include "PstreamGlobals.H"
+#endif
 #include "csrMatrix.H"
 #include "global.cuh"
+
 
 #include "globalIndex.H"
 
@@ -52,6 +55,16 @@ Foam::csrMatrix::csrMatrix(word mode)
     {
         csrMatExec_ = cudaCsrMatrixExecutor();
 	}
+#elif defined(have_sycl)
+    // SPUMA: the execution mode only selects AmgX's execution space; the
+    // ldu->csr conversion can always run on the CPU executor. Whether the
+    // produced arrays are directly device-visible is a property of the
+    // individual allocations (memory pool USM vs host heap) and is
+    // verified against the actual pointers at upload time in AmgXWrapper.
+    else if (mode.starts_with("d"))
+    {
+        csrMatExec_ = cpuCsrMatrixExecutor();
+    }
 #endif
     else
     {
@@ -669,8 +682,9 @@ void Foam::csrMatrix::computePermutation
             const labelUList& faceCells = addr.patchAddr(patchi);
             const label len = faceCells.size();
 
-            labelField nbrCells = 
+            const tmp<labelField> tnbrCells =
                 interfaces[patchi].internalFieldTransfer(Pstream::commsTypes::nonBlocking,globalCells);
+            const labelField& nbrCells = tnbrCells();
 
             if (faceCells.size() != nbrCells.size())
             {
@@ -926,6 +940,11 @@ void Foam::csrMatrix::computePermutation
 //- Apply permutation to LDU values (no permutation)
 void Foam::csrMatrix::applyPermutation(const lduMatrix& lduMatrix)
 {
+    // Windows/WDDM: managed (USM shared) allocations stop being
+    // host-accessible once the CUDA context has pending GPU activity
+    // (AmgX resource init counts). Synchronize before the host-side
+    // conversion reads Foam's managed arrays.
+    cudaDeviceSynchronize();
     // Verify that the permutation has already been computed
     if(!ldu2csrPerm_)
     {
@@ -955,7 +974,7 @@ void Foam::csrMatrix::applyPermutation(const lduMatrix& lduMatrix)
             csrMatExec_);
     }
     
-    std::visit([&](const auto& exec){valid = exec.template isDeviceValid(foamUpper);}, csrMatExec_);
+    std::visit([&](const auto& exec){valid = exec.isDeviceValid(foamUpper);}, csrMatExec_);
     if (valid)
     {
         upper = foamUpper;
@@ -965,7 +984,7 @@ void Foam::csrMatrix::applyPermutation(const lduMatrix& lduMatrix)
                 csrMatExec_);
     }
     
-    std::visit([&](const auto& exec){valid = exec.template isDeviceValid(foamLower);}, csrMatExec_);
+    std::visit([&](const auto& exec){valid = exec.isDeviceValid(foamLower);}, csrMatExec_);
     if (valid)
     {
         lower = foamLower;
@@ -1029,6 +1048,10 @@ void Foam::csrMatrix::applyPermutation
     const FieldField<Field, scalar> interfaceBouCoeffs
 )
 {
+    // Windows/WDDM: see the serial overload - synchronize before
+    // host-side reads of managed Foam arrays (harmless elsewhere)
+    cudaDeviceSynchronize();
+
     label nnzExt = 0;
     const lduInterfacePtrsList& interfaces(lduMatrix.mesh().interfaces());
 
@@ -1108,7 +1131,7 @@ void Foam::csrMatrix::applyPermutation
                 csrMatExec_);
         }
         
-        std::visit([&](const auto& exec){valid = exec.template isDeviceValid(foamUpper.cdata());}, csrMatExec_);
+        std::visit([&](const auto& exec){valid = exec.isDeviceValid(foamUpper.cdata());}, csrMatExec_);
         if (valid)
         {
             upper = foamUpper.cdata();
@@ -1118,7 +1141,7 @@ void Foam::csrMatrix::applyPermutation
                     csrMatExec_);
         }
         
-        std::visit([&](const auto& exec){valid = exec.template isDeviceValid(foamLower.cdata());}, csrMatExec_);
+        std::visit([&](const auto& exec){valid = exec.isDeviceValid(foamLower.cdata());}, csrMatExec_);
         if (valid)
         {
             lower = foamLower.cdata();
@@ -1128,7 +1151,7 @@ void Foam::csrMatrix::applyPermutation
                     csrMatExec_);
         }
 
-        std::visit([&](const auto& exec){valid = exec.template isDeviceValid(foamExtVals.cdata());}, csrMatExec_);
+        std::visit([&](const auto& exec){valid = exec.isDeviceValid(foamExtVals.cdata());}, csrMatExec_);
         if (valid)
         {
             extVals = foamExtVals.cdata();

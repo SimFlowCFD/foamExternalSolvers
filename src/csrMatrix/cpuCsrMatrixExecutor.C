@@ -21,9 +21,17 @@ License
 \*---------------------------------------------------------------------------*/
 
 #include "cpuCsrMatrixExecutor.H"
+#ifdef have_sycl
+// SPUMA: route executor allocations through the memory pool so the CSR
+// arrays land in USM (device-visible) storage - enables the zero-copy
+// dataLocation=device path. Non-SPUMA builds keep plain host new/delete.
+#include "MemoryPoolBase.H"
+#endif
 #include "zero.H"
 #include <cmath>
-#include <bits/stdc++.h>
+#include <algorithm>
+#include <utility>
+#include <vector>
 
 // * * * * * * * * * * * * * * * * Member functions * * * * * * * * * * * * * //
 
@@ -33,8 +41,16 @@ Type* Foam::cpuCsrMatrixExecutor::alloc
     Foam::label size
 ) const
 {
+    if (size <= 0) return nullptr;
+#ifdef have_sycl
+    return static_cast<Type*>
+    (
+        Spuma::MemoryPool::getInstance()->allocate(size*sizeof(Type))
+    );
+#else
     Type* ptr = new Type[size];
 	return ptr;
+#endif
 }
 
 template<class Type>
@@ -43,7 +59,15 @@ Type* Foam::cpuCsrMatrixExecutor::allocZero
     Foam::label size
 ) const
 {
+    if (size <= 0) return nullptr;
+#ifdef have_sycl
+    Type* ptr = static_cast<Type*>
+    (
+        Spuma::MemoryPool::getInstance()->allocate(size*sizeof(Type))
+    );
+#else
     Type* ptr = new Type[size];
+#endif
     for(label i=0; i<size; i++)
     {
     	ptr[i] = Type(0); //vi sy  Foam::Zero);
@@ -76,7 +100,11 @@ void Foam::cpuCsrMatrixExecutor::copyToFoam
 template<class Type>
 void Foam::cpuCsrMatrixExecutor::clear(Type* ptr) const
 {
-    delete ptr;
+#ifdef have_sycl
+    Spuma::MemoryPool::getInstance()->free(ptr);
+#else
+    delete[] ptr;
+#endif
 }
 
 template<class Type>
@@ -208,7 +236,7 @@ void Foam::cpuCsrMatrixExecutor::computeSorting
         rowInd[i] = pairVect[i].first;
         ldu2csr[pairVect[i].second] = i;
     }
-    delete pairTmp;
+    delete[] pairTmp;
 }
 
 

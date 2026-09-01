@@ -23,10 +23,6 @@ License
 #include "AmgXLinearSolverContext.H"
 #include "csrMatrix.H"
 
-// * * * * * * * * * * * * * explicit instantiation * * * * * * * * * * * * //
-
-template class Foam::AmgXLinearSolverContext<Foam::csrMatrix>;
-
 // * * * * * * * * * * * * * * Static Data Members * * * * * * * * * * * * * //
 
 namespace Foam
@@ -41,5 +37,9 @@ namespace Foam
     // const word AmgXLinearSolverContext::packageName = "AmgX";
     template<class matrix> const word AmgXLinearSolverContext<matrix>::packageName = "AmgX";
 }
+
+// * * * * * * * * * * * * * explicit instantiation * * * * * * * * * * * * //
+
+template class Foam::AmgXLinearSolverContext<Foam::csrMatrix>;
 
 // ************************************************************************* //

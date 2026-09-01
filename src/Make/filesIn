@@ -5,4 +5,4 @@ AmgX4Foam/AmgXLinearSolverContext.C
 AmgX4Foam/AmgXSolver.C
 AmgX4Foam/AmgXWrapper.C
 
-LIB = $(FOAM_USER_LIBBIN)/libAmgX4Foam
+LIB = $(FOAM_MODULE_LIBBIN)/libAmgX4Foam

@@ -1,21 +1,50 @@
+/* AmgX location: AMGX_INC / AMGX_LIB from etc/config.sh/amgx
+ * (AMGX_ARCH_PATH install prefix). CUDA runtime headers/libs:
+ * CUDA_PATH_SHORT on Windows, toolchain default include paths otherwise.
+ *
+ * NOTE: this options file targets clang/acpp toolchains (SPUMA). The
+ * upstream nvc++ build used `CC += -cuda` and bundled wmake rules; an
+ * upstream merge should keep both variants side by side.
+ */
+
+sinclude $(GENERAL_RULES)/module-path-user
+
+/* Failsafe - default to user location */
+ifeq (,$(strip $(FOAM_MODULE_LIBBIN)))
+    FOAM_MODULE_LIBBIN = $(FOAM_USER_LIBBIN)
+endif
+
+/* No MPI on native Windows builds (dummy Pstream): compile out the
+ * PstreamGlobals/MPI-communicator paths; parallel AmgX then FatalErrors.
+ */
+ifneq (,$(findstring indows,$(WM_OSTYPE)))
+    AMGX_MPI_FLAGS = -DAMGX4FOAM_NO_MPI
+endif
+
+ifneq (,$(strip $(CUDA_PATH_SHORT)))
+    CUDA_ARCH_INC  = -I$(CUDA_PATH_SHORT)/include
+    CUDA_ARCH_LIBS = -L$(CUDA_PATH_SHORT)/lib/x64 -lcudart
+else
+    CUDA_ARCH_LIBS = -lcudart
+endif
+
+ifneq (,$(strip $(AMGX_INC)))
+    AMGX_INC_FLAGS = -I$(AMGX_INC)
+endif
+
 EXE_INC = \
+    $(AMGX_MPI_FLAGS) \
     -I$(LIB_SRC)/finiteVolume/lnInclude \
     -I$(LIB_SRC)/meshTools/lnInclude \
-    -I$(FOAM_SRC)/Pstream/mpi \
     -I. \
-    -I$(AMGX_INC) \
     -IcsrMatrix \
     -Iutility \
-    -IAmgX
+    -IAmgX4Foam \
+    $(AMGX_INC_FLAGS) \
+    $(CUDA_ARCH_INC)
 
 LIB_LIBS = \
     -lfiniteVolume \
     -lmeshTools \
-    -L$(AMGX_LIB) -lamgxsh -fopenmp \
-    -L$(FOAM_USER_LIBBIN)
-
-CC += -cuda
-
-WMAKE_LOCAL=$(MAKE_DIR)/../../wmake
-include $(WMAKE_LOCAL)/c++
-
+    -L$(AMGX_LIB) -lamgxsh \
+    $(CUDA_ARCH_LIBS)
