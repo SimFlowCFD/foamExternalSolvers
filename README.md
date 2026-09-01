@@ -28,6 +28,8 @@ The library is installed as `libAmgX4Foam` into `FOAM_USER_LIBBIN`
 | `AMGX_ARCH_PATH` | AmgX install prefix containing `include/` and `lib/`. SPUMA resolves it through `etc/config.sh/amgx` and derives `AMGX_INC`/`AMGX_LIB`; elsewhere set `AMGX_INC` and `AMGX_LIB` directly |
 | `CUDA_HOME` / `CUDA_PATH` | CUDA toolkit prefix for clang-based toolchains on Linux (headers in `include/`, `libcudart` in `lib64/`). Not needed for nvc++, nor when the toolkit is on the compiler's default search paths |
 | `CUDA_PATH` (Windows) | CUDA toolkit prefix; SPUMA derives the space-free `CUDA_PATH_SHORT` from it |
+| `CUDA_CLANG` | clang++ used for the `.cu` sources on clang-based toolchains (default: `clang++` from `PATH`) |
+| `NVARCH` | Compute capability for `-cuda` when no value is given on the command line (default 80) |
 
 The build is skipped (exit 0) when AmgX is not found, so the module can be
 part of an unconditional `Allwmake-modules` sweep.
@@ -40,8 +42,16 @@ part of an unconditional `Allwmake-modules` sweep.
   `-cuda` is given.
 - **clang-based compilers, including AdaptiveCpp** (SPUMA `Sycl` builds on
   Linux and native Windows): the CUDA runtime headers and `libcudart` are
-  taken from the toolkit prefix above. The `.cu` executor is not yet
-  available for these toolchains (the CPU executor is used).
+  taken from the toolkit prefix above. With `-cuda` the `.cu` sources are
+  compiled by `CUDA_CLANG` (default `clang++` from `PATH`) in `-x cuda` mode
+  and linked into the same library; that clang must support the CUDA toolkit
+  in use, which the clang bundled with an AdaptiveCpp install may not
+  (SPUMA on Windows: LLVM 20 for CUDA 12.x).
+
+The `-cuda` executor keeps the CSR arrays and the per-solve coefficient
+permutation on the GPU (CUB sort/scan and CUDA kernels). Without it the
+conversion runs on the host; with SPUMA the arrays still live in managed
+memory, so every matrix update migrates them to the host and back.
 
 Native Windows builds use OpenFOAM's dummy Pstream: the library is compiled
 with `AMGX4FOAM_NO_MPI` and parallel runs are rejected with a FatalError.

@@ -1,0 +1,64 @@
+#------------------------------------------------------------------------------
+# Rules for compiling the .cu sources with a clang-based CUDA compiler
+# (clang++ -x cuda), for OpenFOAM builds whose C++ compiler is not nvc++
+# (eg, SPUMA AdaptiveCpp builds). Included from src/Make/options when
+# have_cuda is set.
+#
+# CUDA_CLANG     clang++ to use (default: clang++ from PATH). It must support
+#                the installed CUDA toolkit; the clang bundled with an
+#                AdaptiveCpp install may be too old (SPUMA: LLVM 20 for
+#                CUDA 12.x on Windows, see doc/windows-sycl-cuda).
+# NVARCH         compute capability of the device code (default 80)
+# AMGX_CUDA_HOME CUDA toolkit prefix, from src/Make/options (--cuda-path)
+#------------------------------------------------------------------------------
+
+ifeq (,$(strip $(NVARCH)))
+    override NVARCH := 80
+endif
+
+ifeq (,$(strip $(CUDA_CLANG)))
+    override CUDA_CLANG := clang++
+endif
+
+cuARCH    := -m64
+cuOPT     := -O2
+cuDBUG    :=
+cuWARN    := -Wall -Wextra -Wno-unused-parameter -Wno-old-style-cast
+
+ifneq (,$(or $(findstring Debug,$(WM_COMPILE_OPTION)),$(findstring Dbg,$(WM_COMPILE_OPTION))))
+    cuDBUG    := -g -DFULLDEBUG
+endif
+ifneq (,$(findstring Debug,$(WM_COMPILE_OPTION)))
+    cuOPT     := -O0
+endif
+
+# -Dhave_cuda: OpenFOAM/SPUMA headers decorate their inline math as
+# host+device (FOAM_DEVICE) only with it; the device pass otherwise calls
+# __device__ intrinsics from host-only functions.
+cuFLAGS    = \
+    -std=c++17 -x cuda --cuda-gpu-arch=sm_$(NVARCH) \
+    $(cuARCH) $(cuWARN) $(cuOPT) $(cuDBUG) -DNoRepository -Dhave_cuda $(GFLAGS) \
+    $(FOAM_EXTRA_CXXFLAGS) $(LIB_HEADER_DIRS)
+
+ifneq (,$(strip $(AMGX_CUDA_HOME)))
+    cuFLAGS   += --cuda-path=$(AMGX_CUDA_HOME)
+endif
+
+ifneq (,$(findstring indows,$(WM_OSTYPE)))
+    # MSVC ABI.
+    # -U__ELF__: clang's CUDA mode leaks the NVPTX __ELF__ define into the
+    #   host pass and CCCL (cub/thrust) then misdetects the object format.
+    # -w: the device pass floods __declspec warnings that can break the
+    #   object output.
+    cuFLAGS   += --target=x86_64-pc-windows-msvc -U__ELF__ -w \
+        -D_ALLOW_COMPILER_AND_STL_VERSION_MISMATCH -D_USE_MATH_DEFINES
+else
+    cuFLAGS   += -fPIC
+endif
+
+cutoo       = $(WM_SCHEDULER) $(CUDA_CLANG) $(cuFLAGS) -c $< -o $@
+
+$(OBJECTS_DIR)/%.o : %.cu
+	$(cutoo)
+
+#------------------------------------------------------------------------------

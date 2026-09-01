@@ -9,7 +9,9 @@
  *        -gpu=ccNN and the nvcc rule for .cu sources when have_cuda is set
  *   clang / AdaptiveCpp (SPUMA Sycl builds) - the toolkit is located via
  *        CUDA_PATH_SHORT (Windows) or CUDA_HOME / CUDA_PATH (Linux); with
- *        neither set the compiler's default search paths and -lcudart apply
+ *        neither set the compiler's default search paths and -lcudart apply.
+ *        With have_cuda the .cu sources are compiled by CUDA_CLANG
+ *        (clang++ -x cuda), see ../../wmake/clang-cuda
  */
 
 sinclude $(GENERAL_RULES)/module-path-user
@@ -31,6 +33,11 @@ endif
 
 ifneq (,$(strip $(AMGX_INC)))
     AMGX_INC_FLAGS = -I$(AMGX_INC)
+endif
+
+/* -cuda: the device (CUDA/CUB) ldu->csr executor, sources in filesCuda */
+ifneq (,$(findstring true,$(have_cuda)))
+    AMGX_EXECUTOR_FLAGS = -DAMGX4FOAM_CUDA_EXECUTOR
 endif
 
 ifneq (,$(findstring Nvidia,$(WM_COMPILER)))
@@ -62,10 +69,15 @@ else
         AMGX_CUDA_LIBS = -lcudart
     endif
 
+    ifneq (,$(findstring true,$(have_cuda)))
+        include $(MAKE_DIR)/../../wmake/clang-cuda
+    endif
+
 endif
 
 EXE_INC = \
     $(AMGX_MPI_FLAGS) \
+    $(AMGX_EXECUTOR_FLAGS) \
     -I$(LIB_SRC)/finiteVolume/lnInclude \
     -I$(LIB_SRC)/meshTools/lnInclude \
     -I. \

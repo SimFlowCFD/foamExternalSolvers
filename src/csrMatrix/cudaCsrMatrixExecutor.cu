@@ -28,7 +28,7 @@ License
 #include "global.cuh"
 #include <cub/cub.cuh>
 
-#ifdef have_cuda
+#ifdef AMGX4FOAM_CUDA_EXECUTOR
 
 // * * * * * * * * * * * * * * * * CUDA Kernels  * * * * * * * * * * * * * * //
 
@@ -877,6 +877,6 @@ void Foam::cudaCsrMatrixExecutor::applyValuePermutation
 makecudaCsrMatrixExecutor(Foam::label)
 makecudaCsrMatrixExecutor(Foam::scalar)
 
-#endif // enbd if have_cuda
+#endif // enbd if AMGX4FOAM_CUDA_EXECUTOR
 
 // ************************************************************************* //

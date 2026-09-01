@@ -33,7 +33,7 @@ SourceFiles
 #ifndef csrMatrix_Executor_H
 #define csrMatrix_Executor_H
 
-#ifdef have_cuda
+#ifdef AMGX4FOAM_CUDA_EXECUTOR
 #include "cudaCsrMatrixExecutor.H"
 #endif
 #include "cpuCsrMatrixExecutor.H"
@@ -44,7 +44,7 @@ namespace Foam
 
 using csrMatrixExecutor = std::variant
     <
-#ifdef have_cuda
+#ifdef AMGX4FOAM_CUDA_EXECUTOR
     cudaCsrMatrixExecutor,
 #endif
     cpuCsrMatrixExecutor

@@ -454,14 +454,17 @@ void Foam::AmgXWrapper::setOperator
         const int * colInd; // = matrix->colIndices().cdata();
         const void * matValues; // = matrix->values().cdata();
 
+        // dataLocation=host: copy the CSR arrays to AmgX-owned device
+        // storage. cudaMemcpyDefault infers the direction, the source may be
+        // host memory (CPU executor) or device memory (CUDA executor).
         if(dataOrigin_ == "host")
         {
             cudaMalloc((void**) &ownStart, sizeof(int)*(nLocalRows+1));
             cudaMalloc((void**) &colInd, sizeof(int)*nLocalNz);
             cudaMalloc((void**) &matValues, sizeof(double)*nLocalNz);
-            cudaMemcpy((void*) ownStart, (const void*) matrix->ownerStart(), sizeof(int)*(nLocalRows+1), cudaMemcpyHostToDevice);
-            cudaMemcpy((void*) colInd, (const void*) matrix->colIndices(), sizeof(int)*nLocalNz, cudaMemcpyHostToDevice);
-            cudaMemcpy((void*) matValues, (const void*) matrix->values(), sizeof(double)*nLocalNz, cudaMemcpyHostToDevice);
+            cudaMemcpy((void*) ownStart, (const void*) matrix->ownerStart(), sizeof(int)*(nLocalRows+1), cudaMemcpyDefault);
+            cudaMemcpy((void*) colInd, (const void*) matrix->colIndices(), sizeof(int)*nLocalNz, cudaMemcpyDefault);
+            cudaMemcpy((void*) matValues, (const void*) matrix->values(), sizeof(double)*nLocalNz, cudaMemcpyDefault);
         }
         else
         {

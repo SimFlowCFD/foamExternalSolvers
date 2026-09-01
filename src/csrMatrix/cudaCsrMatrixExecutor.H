@@ -30,7 +30,7 @@ SourceFiles
 
 \*---------------------------------------------------------------------------*/
 
-#ifdef have_cuda
+#ifdef AMGX4FOAM_CUDA_EXECUTOR
 
 #ifndef cuda_CsrMatrix_Executor_H
 #define cuda_CsrMatrix_Executor_H

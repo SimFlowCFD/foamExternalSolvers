@@ -50,7 +50,7 @@ Foam::csrMatrix::csrMatrix(word mode)
     {
         csrMatExec_ = cpuCsrMatrixExecutor();
 	}
-#ifdef have_cuda    
+#ifdef AMGX4FOAM_CUDA_EXECUTOR    
     else if (mode.starts_with("d"))
     {
         csrMatExec_ = cudaCsrMatrixExecutor();
