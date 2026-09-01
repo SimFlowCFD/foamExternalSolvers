@@ -180,18 +180,20 @@ public:
             word mode = "dDDI";
             //word mode = solverDict.get<word>("mode");
             word dataLocation = solverDict.get<word>("dataLocation");
+            const bool allowHostFallback =
+                solverDict.getOrDefault<bool>("allowHostFallback", false);
 
             if (isFile(optionsFile))
             {
                 // AMGx initialize
                 if(!Pstream::parRun())
                 {
-                    amgx_.initialize(mode, dataLocation, optionsFile);
+                    amgx_.initialize(mode, dataLocation, optionsFile, allowHostFallback);
                 }
                 else
                 {
                     const label nReq = Pstream::nRequests();
-                    amgx_.initialize(Pstream::myWorldID(), mode, dataLocation, optionsFile);
+                    amgx_.initialize(Pstream::myWorldID(), mode, dataLocation, optionsFile, allowHostFallback);
                     Pstream::waitRequests(nReq);
                 }
             }
@@ -226,18 +228,20 @@ public:
         {
             word mode = "dDDI";
             //word mode = solverDict.get<word>("mode");
-            word dataLocation =solverDict.get<word>("dataLocation");
+            word dataLocation = solverDict.get<word>("dataLocation");
+            const bool allowHostFallback =
+                solverDict.getOrDefault<bool>("allowHostFallback", false);
 
             string configStr = writeConfigurationString(solverDict.subDict("AmgXconfig"));
 
             if(!Pstream::parRun())
             {
-                amgx_.initialize(mode, dataLocation, configStr);
+                amgx_.initialize(mode, dataLocation, configStr, allowHostFallback);
             }
             else
             {
                 const label nReq = Pstream::nRequests();
-                amgx_.initialize(Pstream::myWorldID(), mode, dataLocation, configStr);
+                amgx_.initialize(Pstream::myWorldID(), mode, dataLocation, configStr, allowHostFallback);
                 Pstream::waitRequests(nReq);
             }
 

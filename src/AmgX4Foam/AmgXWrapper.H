@@ -111,6 +111,8 @@ class AmgXWrapper
          * \param commId [in] MPI communicator.
          * \param modeStr [in] A string; target mode of AmgX (e.g., dDDI).
          * \param dataLocation [in] A string; indicates where are data.
+         * \param allowHostFallback [in] accept a non-CUDA compute backend
+         *        of the application (data copied on every solve).
          * \param configStr [in] A string; the path to AmgX configuration file
          *                  or a configuration string already concatenated.
          */
@@ -118,7 +120,8 @@ class AmgXWrapper
         (
             const word &modeStr,
             const word &dataLocation,
-            const string &configStr
+            const string &configStr,
+            const bool allowHostFallback = false
         );
 
         void initialize
@@ -126,7 +129,8 @@ class AmgXWrapper
             const label &commId,
             const word &modeStr,
             const word &dataLocation,
-            const string &configStr
+            const string &configStr,
+            const bool allowHostFallback = false
         );
 
         void initialiseMatrixComms(csrMatrix* matrix);

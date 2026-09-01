@@ -4,5 +4,6 @@ csrMatrix/cpuCsrMatrixExecutor.C
 AmgX4Foam/AmgXLinearSolverContext.C
 AmgX4Foam/AmgXSolver.C
 AmgX4Foam/AmgXWrapper.C
+AmgX4Foam/amgxBackendGuard.C
 
 LIB = $(FOAM_MODULE_LIBBIN)/libAmgX4Foam

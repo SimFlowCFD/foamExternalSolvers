@@ -28,6 +28,7 @@ License
 #include "PstreamGlobals.H"
 #endif
 
+#include "amgxBackendGuard.H"
 #include "global.cuh"
 #include "OSspecific.H"
 
@@ -126,7 +127,8 @@ void checkCudaError(cudaError_t err, const char* msg) {
 void Foam::AmgXWrapper::initialize(
     const word &modeStr,
     const word &dataLocation,
-    const string &configStr
+    const string &configStr,
+    const bool allowHostFallback
 )
 {
     //- increase the number of AmgXWrapper instances
@@ -135,9 +137,13 @@ void Foam::AmgXWrapper::initialize(
     //- get the mode of AmgX solver
     setMode(modeStr);
 
+    //- use the GPU the application computes on (may adjust dataLocation)
+    word location(dataLocation);
+    devID_ = amgxCheckComputeBackend(-1, allowHostFallback, location);
+
     initAmgX(configStr);
 
-    dataOrigin_ = dataLocation;
+    dataOrigin_ = location;
 
     gpuProc_ = true;
 
@@ -150,7 +156,8 @@ void Foam::AmgXWrapper::initialize(
     const label &commId,
     const word &modeStr,
     const word &dataLocation,
-    const string &configStr
+    const string &configStr,
+    const bool allowHostFallback
 )
 {
     //- increase the number of AmgXWrapper instances
@@ -162,9 +169,18 @@ void Foam::AmgXWrapper::initialize(
     //- initialize communicators and corresponding information
     initComms(commId);
 
-    if(gpuProc_) initAmgX(configStr);
+    word location(dataLocation);
 
-    dataOrigin_ = dataLocation;
+    if(gpuProc_)
+    {
+        //- the device chosen by initComms must be the one the application
+        //  computes on (may adjust dataLocation)
+        devID_ = amgxCheckComputeBackend(devID_, allowHostFallback, location);
+
+        initAmgX(configStr);
+    }
+
+    dataOrigin_ = location;
 
     isInitialised = true;
 }

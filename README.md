@@ -62,6 +62,7 @@ p
     matrixType      CSR;
     dataLocation    device;     // or host
     mode            dDDI;
+    allowHostFallback false;    // optional, see below
     AmgXconfig
     {
         // AmgX configuration, see the AmgX reference manual
@@ -73,3 +74,12 @@ p
 requires them to live in CUDA device or managed memory (SPUMA GPU builds
 allocate them through the memory pool). `dataLocation host` copies them to
 the device first and works with any allocation.
+
+At initialisation the library checks that AmgX uses the GPU the application
+computes on. With SPUMA this is the SYCL (or native CUDA) device: in serial
+runs AmgX is placed on that device, in parallel runs a mismatch between the
+rank's AmgX device and its compute device is a FatalError. When the
+application does not compute on a CUDA device at all (host OpenMP or HIP
+backend) the run stops as well, because every solve would copy the matrix
+and vectors across host and device. Set `allowHostFallback true;` to accept
+that (typically for debugging); `dataLocation` is then forced to `host`.
