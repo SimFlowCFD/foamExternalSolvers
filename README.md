@@ -34,6 +34,21 @@ The library is installed as `libAmgX4Foam` into `FOAM_USER_LIBBIN`
 The build is skipped (exit 0) when AmgX is not found, so the module can be
 part of an unconditional `Allwmake-modules` sweep.
 
+At run time `libamgxsh.so` must be found by the dynamic loader: the library
+is not linked with an rpath, so add `$AMGX_LIB` (SPUMA: `$AMGX_ARCH_PATH/lib`)
+to `LD_LIBRARY_PATH` before running a case.
+
+Example, SPUMA `Sycl` build on Linux with the system clang and a CUDA 12.6
+toolkit:
+
+```
+export CUDA_HOME=/usr/local/cuda-12.6
+export CUDA_CLANG=/usr/lib/llvm-19/bin/clang++
+export AMGX_ARCH_PATH=/path/to/amgx-2.5.0     # include/ lib/
+./Allwmake -cuda 86
+export LD_LIBRARY_PATH=$AMGX_ARCH_PATH/lib:$LD_LIBRARY_PATH
+```
+
 ### Toolchains
 
 - **nvc++** (`WM_COMPILER=Nvidia*`, the upstream/SPUMA-Linux configuration):
@@ -46,7 +61,8 @@ part of an unconditional `Allwmake-modules` sweep.
   compiled by `CUDA_CLANG` (default `clang++` from `PATH`) in `-x cuda` mode
   and linked into the same library; that clang must support the CUDA toolkit
   in use, which the clang bundled with an AdaptiveCpp install may not
-  (SPUMA on Windows: LLVM 20 for CUDA 12.x).
+  (SPUMA on Windows: LLVM 20 for CUDA 12.x; on Linux the Ubuntu 24.04
+  clang 19 builds them against CUDA 12.6).
 
 The `-cuda` executor keeps the CSR arrays and the per-solve coefficient
 permutation on the GPU (CUB sort/scan and CUDA kernels). Without it the
@@ -55,6 +71,16 @@ memory, so every matrix update migrates them to the host and back.
 
 Native Windows builds use OpenFOAM's dummy Pstream: the library is compiled
 with `AMGX4FOAM_NO_MPI` and parallel runs are rejected with a FatalError.
+
+### Parallel runs
+
+One AmgX instance is created per GPU. When several ranks of a node share a
+GPU, one of them owns the AmgX instance and the others hand their matrix
+partitions over through CUDA IPC (consolidation). That path needs the
+`-cuda` executor: the CPU executor does not implement the IPC copy
+(`cpuCsrMatrixExecutor::offsetCopy`) and stops with a FatalError. With one
+rank per GPU no consolidation takes place and AmgX receives the partitions
+directly (`AMGX_matrix_upload_distributed`).
 
 ## Usage
 
