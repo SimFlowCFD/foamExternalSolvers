@@ -53,7 +53,9 @@ ifneq (,$(findstring indows,$(WM_OSTYPE)))
     cuFLAGS   += --target=x86_64-pc-windows-msvc -U__ELF__ -w \
         -D_ALLOW_COMPILER_AND_STL_VERSION_MISMATCH -D_USE_MATH_DEFINES
 else
-    cuFLAGS   += -fPIC
+    # -Wno-unknown-cuda-version: a toolkit minor newer than the one clang
+    #   was released against (eg, clang 19 with CUDA 12.6) is fine in practice
+    cuFLAGS   += -fPIC -Wno-unknown-cuda-version
 endif
 
 cutoo       = $(WM_SCHEDULER) $(CUDA_CLANG) $(cuFLAGS) -c $< -o $@
