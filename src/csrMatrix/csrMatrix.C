@@ -430,28 +430,28 @@ void Foam::csrMatrix::initializeValuesConsolidation
 
     if(!gpuProc_) cudaIpcOpenMemHandle((void**) &diagCons, diagConsHandle, cudaIpcMemLazyEnablePeerAccess );
     consDispl = rowsConsDispPtr_->cdata()[myGpuWorldRank_];
-    std::visit([this, consDispl, &diagCons, diag](const auto& exec)
+    std::visit([this, consDispl, &diagCons, &diag](const auto& exec)
                 { exec.offsetCopy(diag, diagCons, consDispl); },
                 csrMatExec_);
     if(!gpuProc_) cudaIpcCloseMemHandle(diagCons);
 
     if(!gpuProc_) cudaIpcOpenMemHandle((void**) &upperCons, upperConsHandle, cudaIpcMemLazyEnablePeerAccess );
     consDispl = intFacesConsDispPtr_->cdata()[myGpuWorldRank_];
-    std::visit([this, consDispl, &upperCons, upper](const auto& exec)
+    std::visit([this, consDispl, &upperCons, &upper](const auto& exec)
                 { exec.offsetCopy(upper, upperCons, consDispl); },
                 csrMatExec_);
     if(!gpuProc_) cudaIpcCloseMemHandle(upperCons);
 
     if(!gpuProc_) cudaIpcOpenMemHandle((void**) &lowerCons, lowerConsHandle, cudaIpcMemLazyEnablePeerAccess );
     consDispl = intFacesConsDispPtr_->cdata()[myGpuWorldRank_];
-    std::visit([this, consDispl, &lowerCons, lower](const auto& exec)
+    std::visit([this, consDispl, &lowerCons, &lower](const auto& exec)
                 { exec.offsetCopy(lower, lowerCons, consDispl); },
                 csrMatExec_);
     if(!gpuProc_) cudaIpcCloseMemHandle(lowerCons);
 
     if(!gpuProc_) cudaIpcOpenMemHandle((void**) &extValCons, extConsHandle, cudaIpcMemLazyEnablePeerAccess );
     consDispl = extNzConsDispPtr_->cdata()[myGpuWorldRank_];
-    std::visit([this, consDispl, &extValCons, extVal](const auto& exec)
+    std::visit([this, consDispl, &extValCons, &extVal](const auto& exec)
                 { exec.offsetCopy(extVal, extValCons, consDispl); },
                 csrMatExec_);
     if(!gpuProc_) cudaIpcCloseMemHandle(extValCons);
