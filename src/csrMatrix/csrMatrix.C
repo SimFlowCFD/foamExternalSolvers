@@ -716,9 +716,9 @@ void Foam::csrMatrix::computePermutation
 
     if(consolidationStatus_ == ConsolidationStatus::necessary)
     {
-        consDiagOffGlob = new labelField(gpuWorldSize_);
-        consLowOffGlob = new labelField(gpuWorldSize_);
-        consUppOffGlob = new labelField(gpuWorldSize_);
+        consDiagOffGlob = new labelList(gpuWorldSize_, Foam::Zero);
+        consLowOffGlob = new labelList(gpuWorldSize_, Foam::Zero);
+        consUppOffGlob = new labelList(gpuWorldSize_, Foam::Zero);
         
         initializeConsolidation(nCells, nIntFaces, nnzExt, diagIndexGlobal, lowOffGlobal, uppOffGlobal,
                                 hostOwn, hostNeigh, foamExtRows, foamExtCols, totNnz,
