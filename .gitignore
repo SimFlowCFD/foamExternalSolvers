@@ -8,3 +8,5 @@ src/lnInclude
 *cproject
 *project
 *settings
+src/Make/win64*
+src/Make/darwin*
